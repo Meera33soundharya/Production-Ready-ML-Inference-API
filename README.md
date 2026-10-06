@@ -1,67 +1,147 @@
 # Production-Ready ML Inference API
 
-A project for building and deploying a reliable API that serves machine-learning model predictions. The goal is to make model inference accessible through a documented HTTP interface and to provide the operational foundations needed to run it consistently.
+A runnable machine-learning inference API built with FastAPI and scikit-learn. It trains a small Iris flower classifier from scikit-learn's bundled dataset, saves the model locally, and serves predictions over HTTP.
 
-> **Status:** This repository currently contains project documentation only. The API, model, tests, and deployment configuration have not been implemented yet.
+## Features
 
-## Project goals
+- Single and batch predictions with input validation.
+- Liveness and readiness health endpoints.
+- Model trained from a built-in dataset; no dataset download is needed.
+- Model artifact created locally and excluded from Git.
+- Automated API tests.
+- Docker image that builds its model artifact during image creation and runs as a non-root user.
 
-- Expose model predictions through a clear, versionable API.
-- Validate incoming requests and return useful error responses.
-- Load and manage model artifacts safely and predictably.
-- Make the service observable with health checks and structured logs.
-- Support repeatable local development, testing, and deployment.
-- Document setup, configuration, and API usage as the implementation evolves.
+## Project structure
 
-## Intended capabilities
+```text
+.
+├── app/
+│   ├── __init__.py
+│   ├── main.py          # FastAPI application and endpoints
+│   ├── model.py         # Model training, persistence, and inference
+│   └── schemas.py       # Validated request and response models
+├── models/              # Generated model artifacts (not committed)
+├── tests/
+│   └── test_api.py
+├── .dockerignore
+├── .gitignore
+├── Dockerfile
+├── requirements.txt
+└── requirements-dev.txt
+```
 
-The implementation is expected to cover the following areas:
+## Requirements
 
-- **Inference:** accept input data, run a model, and return predictions.
-- **Input validation:** reject malformed or unsupported requests with actionable errors.
-- **Health checks:** report whether the service is running and ready to serve requests.
-- **Configuration:** keep environment-specific settings outside the source code.
-- **Testing:** verify request validation, prediction behavior, and service endpoints.
-- **Packaging and deployment:** provide a reproducible way to build and run the service.
+- Python 3.11 or newer
+- pip
 
-These are project objectives, not claims about functionality already available in this repository.
+## Run locally on Windows
 
-## Repository contents
+From the project directory, create and activate a virtual environment, install the development dependencies, train the model, and start the API:
 
-The implementation has not been added yet. As the project develops, this section should describe the actual source tree, model artifacts, tests, and deployment files.
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+python -m app.train
+python -m uvicorn app.main:app --reload
+```
 
-## Getting started
+The API will be available at <http://127.0.0.1:8000>. Interactive API documentation is available at <http://127.0.0.1:8000/docs>.
 
-There is no runnable application or dependency manifest in the repository yet. Setup and run instructions will be added once the API implementation and its chosen technology stack are in place.
+The training command writes `models/iris_model.joblib`. To use a different artifact path, set `MODEL_PATH` before training and when starting the API:
 
-## API documentation
+```powershell
+$env:MODEL_PATH = "models\iris_model.joblib"
+python -m app.train
+python -m uvicorn app.main:app --reload
+```
 
-The API contract, including available endpoints, request and response formats, and error codes, will be documented here when implemented.
+Only load model artifacts from trusted sources. Joblib model files can execute code when loaded.
+
+## API
+
+### `GET /health/live`
+
+Returns `200` when the process is running.
+
+### `GET /health/ready`
+
+Returns `200` when the model is loaded. Returns `503` if the model is not ready.
+
+### `POST /api/v1/predict`
+
+Request:
+
+```json
+{
+  "sepal_length_cm": 5.1,
+  "sepal_width_cm": 3.5,
+  "petal_length_cm": 1.4,
+  "petal_width_cm": 0.2
+}
+```
+
+Response:
+
+```json
+{
+  "class_index": 0,
+  "class_name": "setosa",
+  "probabilities": {
+    "setosa": 0.98,
+    "versicolor": 0.02,
+    "virginica": 0.0
+  }
+}
+```
+
+The probabilities shown above are illustrative; actual values are returned by the trained model. All four measurements must be finite, positive numbers, and unknown request fields are rejected.
+
+### `POST /api/v1/predict/batch`
+
+Pass between 1 and 128 feature objects in a `features` array:
+
+```json
+{
+  "features": [
+    {
+      "sepal_length_cm": 5.1,
+      "sepal_width_cm": 3.5,
+      "petal_length_cm": 1.4,
+      "petal_width_cm": 0.2
+    }
+  ]
+}
+```
+
+The response contains a `predictions` array with one prediction per input object.
+
+## Run with Docker
+
+Build and start the service:
+
+```powershell
+docker build -t production-ready-ml-inference-api .
+docker run --rm -p 8000:8000 production-ready-ml-inference-api
+```
+
+The image installs the production dependencies and trains the bundled Iris model during the build. Once it is running, visit <http://127.0.0.1:8000/docs>.
+
+## Run tests
+
+```powershell
+python -m pytest
+```
 
 ## Configuration
 
-Configuration options and required environment variables will be documented here when implemented. Do not commit credentials, tokens, or other secrets to the repository.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MODEL_PATH` | `models/iris_model.joblib` | Path to the model artifact used by the API and training command. |
 
-## Development and testing
+## Notes
 
-Build, test, lint, and formatting instructions will be added alongside the corresponding project tooling.
+The Iris model is a small demonstration model, not a domain-specific or independently validated production model. Replace it with a model trained and evaluated for your use case before serving real predictions. Protect the service with authentication, rate limiting, and deployment-specific network controls before exposing it publicly.
 
-## Deployment
-
-Deployment instructions, including runtime requirements, model artifact handling, and production configuration, will be documented when deployment support is added.
-
-## Roadmap
-
-- [ ] Choose and document the application stack.
-- [ ] Implement the inference API and health checks.
-- [ ] Add request validation and consistent error handling.
-- [ ] Add automated tests and developer instructions.
-- [ ] Add production configuration, observability, and deployment guidance.
-
-## Contributing
-
-Contributions are welcome. Please open an issue to discuss a substantial change before submitting a pull request. Once development tooling is in place, contributions should include relevant tests and documentation updates.
-
-## License
-
-No license has been specified yet. Until one is added, all rights are reserved by the copyright holder.
+No software license has been specified yet.
